@@ -1,8 +1,23 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { FiMenu, FiX, FiChevronDown, FiUser, FiTrash2, FiChevronDown as FiArrowDown } from "react-icons/fi";
-import { useTranslation } from "react-i18next";
-import { Image, useToast, useBreakpointValue, useDisclosure } from "@chakra-ui/react";
+import { 
+  FiMenu, 
+  FiX, 
+  FiChevronDown, 
+  FiUser, 
+  FiTrash2, 
+  FiMoon, 
+  FiSun,
+  FiChevronDown as FiArrowDown 
+} from "react-icons/fi";import { useTranslation } from "react-i18next";
+import { 
+  Image, 
+  useToast, 
+  useBreakpointValue, 
+  useDisclosure,
+  IconButton,
+  useColorMode
+} from "@chakra-ui/react";
 import hushhLogo from "../components/images/Hushhogo.png";
 import LanguageSwitcher from "./LanguageSwitcher";
 import DeleteAccountModal from "./DeleteAccountModal";
@@ -48,6 +63,7 @@ const TickerChip = ({ quote, isLoading }: { quote: StockQuote; isLoading?: boole
 
 export default function Navbar() {
   const { t, i18n } = useTranslation();
+  const { colorMode, toggleColorMode } = useColorMode();
   const [isOpen, setIsOpen] = useState(false);
   const [toastShown, setToastShown] = useState(false);
   const previousUserIdRef = useRef<string | null>(null);
@@ -257,6 +273,13 @@ export default function Navbar() {
           <div className="flex items-center gap-3">
             {/* Language Selector */}
             <LanguageSwitcher variant="light" />
+            <IconButton
+  aria-label="Toggle theme"
+  icon={colorMode === "light" ? <FiMoon /> : <FiSun />}
+  onClick={toggleColorMode}
+  variant="ghost"
+  size="md"
+/>
 
             {/* Desktop Utility Actions */}
             {isDesktop && (
