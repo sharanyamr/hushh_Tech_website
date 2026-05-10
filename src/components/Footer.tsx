@@ -206,8 +206,8 @@ export default function Footer() {
 
         {/* Disclaimer */}
         <div className="p-4 rounded-xl bg-[#161d2b]/50 border border-[#1F2937]/50">
-          <p className="text-gray-500 text-xs leading-5">
-            <span className="font-bold text-gray-400">Disclaimer:</span> Investment involves risk, including the possible loss of principal. Past performance does not guarantee future results. Please consult with a financial advisor before making investment decisions.
+          <p className="text-gray-300 text-xs leading-5">
+            <span className="font-bold text-gray-200">Disclaimer:</span> Investment involves risk, including the possible loss of principal. Past performance does not guarantee future results. Please consult with a financial advisor before making investment decisions.
           </p>
         </div>
       </div>
