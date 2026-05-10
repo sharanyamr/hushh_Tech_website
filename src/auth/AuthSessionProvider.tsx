@@ -22,7 +22,6 @@ import {
   getValidatedSession,
   parseAuthBroadcastEvent,
   startUnifiedOAuth,
-  validateSessionCandidate,
 } from "./session";
 
 interface AuthSessionContextValue extends AuthSessionSnapshot {
@@ -51,16 +50,26 @@ export const AuthSessionProvider: React.FC<{
   children: React.ReactNode;
 }> = ({ children }) => {
   const supabase = config.supabaseClient;
+
   const [snapshot, setSnapshot] =
     useState<AuthSessionSnapshot>(INITIAL_SNAPSHOT);
+
   const pendingSignedOutStateRef = useRef<PendingSignedOutState | null>(null);
+
+  // Prevent stale INITIAL_SESSION events from restoring
+  // invalid sessions from localStorage after backend rejection.
+  const invalidatedSessionRef = useRef(false);
 
   const applySnapshot = useCallback((nextSnapshot: AuthSessionSnapshot) => {
     setSnapshot((currentSnapshot) => {
       const currentUserId = currentSnapshot.user?.id ?? null;
       const nextUserId = nextSnapshot.user?.id ?? null;
-      const currentAccessToken = currentSnapshot.session?.access_token ?? null;
-      const nextAccessToken = nextSnapshot.session?.access_token ?? null;
+
+      const currentAccessToken =
+        currentSnapshot.session?.access_token ?? null;
+
+      const nextAccessToken =
+        nextSnapshot.session?.access_token ?? null;
 
       if (
         currentSnapshot.status === nextSnapshot.status &&
@@ -97,12 +106,17 @@ export const AuthSessionProvider: React.FC<{
       broadcast = false
     ) => {
       pendingSignedOutStateRef.current = { status, reason };
+
       clearLegacyAuthStorage();
+
       await clearSupabaseSession(supabase);
+
       applyClearedState(status, reason);
+
       if (broadcast) {
         broadcastAuthEvent(reason);
       }
+
       return {
         status,
         session: null,
@@ -117,26 +131,39 @@ export const AuthSessionProvider: React.FC<{
     const nextSnapshot = await getValidatedSession(supabase);
 
     if (nextSnapshot.status === "invalidated") {
+      // Mark invalidation so stale INITIAL_SESSION
+      // cannot restore old cached auth state.
+      invalidatedSessionRef.current = true;
+
       return clearLocalSession(
         "invalidated",
         nextSnapshot.reason || "invalid_session"
       );
     }
 
+    // Reset invalidation after successful validation.
+    invalidatedSessionRef.current = false;
+
     applySnapshot(nextSnapshot);
+
     return nextSnapshot;
   }, [applySnapshot, clearLocalSession, supabase]);
 
-  // Boot: Instantly resolve from localStorage (no network call).
-  // This eliminates the 'booting' state almost immediately.
-  // onAuthStateChange below handles INITIAL_SESSION for the definitive state.
+  // Boot from localStorage first for fast UI,
+  // then immediately perform authoritative validation.
   useEffect(() => {
-    const bootFromLocalStorage = async () => {
+    const bootSession = async () => {
+      // Fast local restore
       const localSnapshot = await getLocalSession(supabase);
+
       applySnapshot(localSnapshot);
+
+      // Critical: validate against backend/Supabase
+      await revalidateSession();
     };
-    void bootFromLocalStorage();
-  }, [applySnapshot, supabase]);
+
+    void bootSession();
+  }, [applySnapshot, revalidateSession, supabase]);
 
   useEffect(() => {
     if (!supabase) {
@@ -145,14 +172,25 @@ export const AuthSessionProvider: React.FC<{
         session: null,
         user: null,
       });
+
       return;
     }
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
+      // Ignore stale INITIAL_SESSION events restored from localStorage
+      // after backend validation already invalidated the session.
+      if (
+        event === "INITIAL_SESSION" &&
+        invalidatedSessionRef.current
+      ) {
+        return;
+      }
+
       if (event === "SIGNED_OUT" || !nextSession) {
         const pendingState = pendingSignedOutStateRef.current;
+
         pendingSignedOutStateRef.current = null;
 
         applySnapshot({
@@ -161,14 +199,13 @@ export const AuthSessionProvider: React.FC<{
           user: null,
           reason: pendingState?.reason,
         });
+
         return;
       }
 
-      // Trust the session provided by Supabase events directly.
-      // Supabase has already validated the token before firing the event.
-      // This eliminates redundant getUser() network calls on every
-      // INITIAL_SESSION, SIGNED_IN, and TOKEN_REFRESHED event.
       if (nextSession.user?.id && nextSession.access_token) {
+        invalidatedSessionRef.current = false;
+
         applySnapshot({
           status: "authenticated",
           session: nextSession,
@@ -183,21 +220,21 @@ export const AuthSessionProvider: React.FC<{
       }
     });
 
-    // Soft revalidation for focus/visibility — only reads localStorage,
-    // no server-side getUser() call. This prevents session drops when
-    // switching tabs. Supabase's autoRefreshToken handles token renewal.
+    // Soft revalidation without network calls.
     const handleSoftRevalidation = async () => {
       const localSnapshot = await getLocalSession(supabase);
 
       if (localSnapshot.status === "invalidated") {
+        invalidatedSessionRef.current = true;
+
         await clearLocalSession(
           "invalidated",
           localSnapshot.reason || "invalid_session"
         );
+
         return;
       }
 
-      // Only update if local session still exists (no-op if anonymous)
       if (localSnapshot.status === "authenticated") {
         applySnapshot(localSnapshot);
       }
@@ -222,29 +259,51 @@ export const AuthSessionProvider: React.FC<{
       }
 
       const payload = parseAuthBroadcastEvent(storageEvent.newValue);
+
       if (!payload) {
         return;
       }
 
       const nextStatus =
-        payload.reason === "signed_out" ? "anonymous" : "invalidated";
+        payload.reason === "signed_out"
+          ? "anonymous"
+          : "invalidated";
+
       void clearLocalSession(nextStatus, payload.reason, false);
     };
 
     window.addEventListener("focus", handleWindowFocus);
+
     window.addEventListener("storage", handleStorage);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    document.addEventListener(
+      "visibilitychange",
+      handleVisibilityChange
+    );
 
     return () => {
       subscription.unsubscribe();
-      window.removeEventListener("focus", handleWindowFocus);
-      window.removeEventListener("storage", handleStorage);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+
+      window.removeEventListener(
+        "focus",
+        handleWindowFocus
+      );
+
+      window.removeEventListener(
+        "storage",
+        handleStorage
+      );
+
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange
+      );
     };
   }, [applySnapshot, clearLocalSession, supabase]);
 
   const startOAuth = useCallback(
-    async (provider: OAuthProvider) => startUnifiedOAuth(provider, supabase),
+    async (provider: OAuthProvider) =>
+      startUnifiedOAuth(provider, supabase),
     [supabase]
   );
 
@@ -253,6 +312,7 @@ export const AuthSessionProvider: React.FC<{
 
     if (!supabase) {
       applyClearedState("anonymous", "signed_out");
+
       return;
     }
 
@@ -264,16 +324,29 @@ export const AuthSessionProvider: React.FC<{
     try {
       await supabase.auth.signOut();
     } catch (error) {
-      console.error("[AuthSession] Sign-out failed, clearing locally:", error);
+      console.error(
+        "[AuthSession] Sign-out failed, clearing locally:",
+        error
+      );
+
       await clearSupabaseSession(supabase);
     }
 
+    invalidatedSessionRef.current = false;
+
     applyClearedState("anonymous", "signed_out");
+
     broadcastAuthEvent("signed_out");
   }, [applyClearedState, supabase]);
 
   const handleAccountDeleted = useCallback(async () => {
-    await clearLocalSession("invalidated", "deleted", true);
+    invalidatedSessionRef.current = true;
+
+    await clearLocalSession(
+      "invalidated",
+      "deleted",
+      true
+    );
   }, [clearLocalSession]);
 
   const value = useMemo<AuthSessionContextValue>(
@@ -284,7 +357,13 @@ export const AuthSessionProvider: React.FC<{
       revalidateSession,
       handleAccountDeleted,
     }),
-    [handleAccountDeleted, revalidateSession, signOut, snapshot, startOAuth]
+    [
+      handleAccountDeleted,
+      revalidateSession,
+      signOut,
+      snapshot,
+      startOAuth,
+    ]
   );
 
   return (

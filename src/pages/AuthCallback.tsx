@@ -194,14 +194,14 @@ const AuthCallback: React.FC = () => {
                 size="lg"
                 onClick={() => navigate('/user-registration')}
               >
-                Set us your profile
+                Set up your profile
               </Button>
               <Button
                 variant="outline"
                 size="lg"
                 onClick={() => navigate('/community')}
               >
-                Checkout communnity posts
+                Checkout community posts
               </Button>
             </Flex>
           </Flex>

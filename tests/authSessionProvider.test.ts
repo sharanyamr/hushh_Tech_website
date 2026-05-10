@@ -160,7 +160,7 @@ describe("AuthSessionProvider", () => {
   });
 
   // TODO: Fix race condition — getUser 401 resolves after getSession restores "authenticated"
-  it.skip("invalidates a stale persisted session and clears it locally", async () => {
+  it("invalidates a stale persisted session and clears it locally", async () => {
     mockGetSession.mockResolvedValue({
       data: { session: MOCK_SESSION },
       error: null,
