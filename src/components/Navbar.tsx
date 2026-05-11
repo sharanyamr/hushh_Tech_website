@@ -372,10 +372,11 @@ export default function Navbar() {
           onClick={toggleDrawer}
         >
           <div
-            ref={drawerRef}
-            className="fixed inset-0 bg-[#F2F2F7] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
+  ref={drawerRef}
+  className="fixed inset-0 bg-[#F2F2F7] overflow-y-auto"
+  onClick={(e) => e.stopPropagation()}
+  onScroll={handleMenuScroll}
+>
             <div className="flex flex-col min-h-full max-w-md mx-auto w-full px-4 pb-10">
               {/* Header: Menu title + Close button */}
               <div className="flex items-center justify-between pt-14 pb-4 px-0">

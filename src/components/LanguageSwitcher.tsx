@@ -211,7 +211,7 @@ const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({ variant = 'light' }
           className="absolute right-0 mt-2 w-40 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-[200]"
         >
           {languages.map((lang, index) => {
-            const isSelected = i18n.language === lang.code;
+            const isActive = i18n.language.startsWith(lang.code);
             return (
               <button
                 key={lang.code}
@@ -220,17 +220,17 @@ const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({ variant = 'light' }
                 }}
                 type="button"
                 role="menuitemradio"
-                aria-checked={isSelected}
+                aria-checked={isActive}
                 onClick={() => changeLanguage(lang.code)}
                 onKeyDown={(event) => handleOptionKeyDown(event, index, lang.code)}
                 className={`w-full flex items-center justify-between px-4 py-2.5 text-left text-sm transition-colors
-                  ${isSelected 
+                  ${isActive 
                     ? 'bg-[#135bec]/5 text-[#135bec] font-semibold' 
                     : 'text-gray-700 hover:bg-gray-50'
                   }`}
               >
                 <span>{lang.name}</span>
-                {isSelected && (
+                {isActive && (
                   <FiCheck className="w-4 h-4 text-[#135bec]" />
                 )}
               </button>
